@@ -265,10 +265,21 @@ namespace utils::hook
 		if (MH_CreateHook(this->place_, target, &this->original_) != MH_OK)
 		{
 			this->place_ = nullptr;
+			this->original_ = nullptr;
 			throw std::runtime_error("Unable to create hook");
 		}
 
-		MH_EnableHook(this->place_);
+		const auto status = MH_EnableHook(this->place_);
+		if (status != MH_OK && status != MH_ERROR_ENABLED)
+		{
+			// MinHook may have redirected suspended threads into the trampoline
+			// before failing to patch the target. Keep the entry/trampoline alive:
+			// removing a disabled hook would free it without moving those threads.
+			// The failed target is not retryable, but must not look installed.
+			this->place_ = nullptr;
+			this->original_ = nullptr;
+			throw std::runtime_error("Unable to enable hook");
+		}
 	}
 
 	void detour::create(const size_t place, void* target)

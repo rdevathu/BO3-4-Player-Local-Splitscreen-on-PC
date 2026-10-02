@@ -270,7 +270,7 @@
 		}
 
 		// Detours the engine function at `rva` if it still starts with `prologue`;
-		// otherwise writes nothing and returns false.
+		// A mismatch or hook failure returns false; callers' safety gates stay shut.
 		template <size_t N, typename F>
 		bool hook_if_stock(utils::hook::detour& hook, const size_t rva, const uint8_t (&prologue)[N],
 		                   F* stub)
@@ -281,7 +281,17 @@
 				note("[splitscreen] 0x%zX: prologue differs - not hooked\n", rva);
 				return false;
 			}
-			hook.create(reinterpret_cast<void*>(place), reinterpret_cast<void*>(stub));
+			try
+			{
+				hook.create(reinterpret_cast<void*>(place), reinterpret_cast<void*>(stub));
+			}
+			catch (const std::exception& error)
+			{
+				// Keep applying independent patches: aborting here would leave the
+				// earlier relocations and scheduler tasks only partly initialized.
+				note("[splitscreen] 0x%zX: not hooked - %s\n", rva, error.what());
+				return false;
+			}
 			return true;
 		}
 

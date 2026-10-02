@@ -4,6 +4,7 @@
 // (0x06517980, 0x0888C368); translate them with tools/port_map.py
 // (BO3_PORT_PAIR=2026 for 0x06517980).
 #include <std_include.hpp>
+#include <exception>
 #include "loader/component_loader.hpp"
 
 #include "game/game.hpp"
