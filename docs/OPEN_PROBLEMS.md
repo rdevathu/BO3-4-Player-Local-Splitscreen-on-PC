@@ -49,13 +49,16 @@ show as the name (`+0x303BCA8` in 0x06531394). A per-controller xuid source
 still sized `[2]` is read on that path (slot 2 = a foreign object). Joins made inside the ZM/MP lobby get
 correct identities.
 
-### A6. Umbra visibility: two per-client int arrays still `[2]`
-`umbraGlob+0x12DC48` and `+0x12DC50` (PS4 `UmbraGlob.clientGates[4]`,
-`viewCount[4]`). Client 2 writes `+0x12DC48[2]` = `+0x12DC50[0]` (client 0's
-slot), client 3 the same for client 1; clients 2/3 read their `+0x12DC50`
-entry from padding (0). Users: `0x01C8CC72`, `0x01C8DA64`, `0x01C8DB20`,
-`0x01C8DB68`, `0x01C8CBB2` (same addresses in both builds). Relocate after a
-full reference scan.
+### A6. Umbra visibility arrays (growth implemented; failure now disables the component)
+The two per-client tome-trigger selector arrays at `umbraGlob+0x12DC48`
+and `+0x12DC50` overlapped for clients 2/3. `grow_umbra_client_arrays()`
+already moves them to `+0x470270` and `+0x470280`, moves the per-client
+parameters to `+0x470220`, and grows the culler allocation and initialization
+spans. Its result is now required before any other component patches or
+callbacks are installed: an already allocated object, operand mismatch or
+write-permission failure leaves extra-client admission unchanged. All write
+permissions are acquired before changing any operand, avoiding partial growth
+if a later permission request fails. Live failure-path behavior remains untested.
 
 ### A8. (fixed in 2.6.1, see B12)
 Seen 2026-09-30 (2.6 test, Rise TDM, just after spawn): AV reading

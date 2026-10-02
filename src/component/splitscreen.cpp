@@ -70,8 +70,9 @@ namespace splitscreen
 		#include "splitscreen/15_stats_cache.inl"
 		#include "splitscreen/16_update_check.inl"
 
-		// Marks the image as patched: runtime.cpp's patched-twice check reads this
-		// magic and stands down instead of applying the component a second time.
+		// Claims ownership, including while ready() retries or setup is disabled:
+		// runtime.cpp reads this magic and stands down instead of starting a second
+		// component instance. This marker does not certify successful setup.
 		void publish_status_magic()
 		{
 			auto* s = reinterpret_cast<uint32_t*>(base() + status_rva);
@@ -101,6 +102,16 @@ namespace splitscreen
 				return false; // image not settled yet - try again
 			}
 
+			// Umbra's indexed setters have no two-client guard. Fail before any
+			// other relocation, hook, admission bound or scheduled loop can enable
+			// extra clients. A late object or incompatible image is terminal, not
+			// an unsettled image to retry after startup.
+			if (!grow_umbra_client_arrays())
+			{
+				raise_local_client_count = false;
+				note("[splitscreen] Umbra prerequisite failed - component disabled\n");
+				return true; // handled; do not schedule another attempt
+			}
 			// Behind ezz BOIII: controllers 2/3 get the engine's own XUID and
 			// name code back, local clients 2/3 get cgame memory of their own
 			// (splitscreen_ezz.hpp). Nothing happens on official BOIII.
@@ -253,8 +264,6 @@ namespace splitscreen
 			              sv_add_modified_stats_prologue, sv_add_modified_stats_stub);
 			// Stats transfer: read the server's missing-packet masks unsigned (load hang).
 			install_statresponse_parse();
-			// Before R_Init allocates the culler object (see grow_umbra_client_arrays).
-			grow_umbra_client_arrays();
 			install_perclient_buffer_guard();
 			install_guest_copy();
 			widen_csc_lc_checks();

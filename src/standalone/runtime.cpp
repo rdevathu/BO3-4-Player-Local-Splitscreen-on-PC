@@ -472,10 +472,10 @@ namespace runtime
 
 		const auto base = reinterpret_cast<size_t>(game_module);
 
-		// A development client (boiii.exe built with the component) has already
-		// applied everything in its own post_unpack, which runs before this. Its
-		// first act is to write the status magic, so seeing it means: stand down,
-		// never patch the game twice.
+		// A development client (boiii.exe built with the component) claims ownership
+		// in its own post_unpack, which runs before this. Its first act writes the
+		// magic even if setup is deferred or disabled: stand down so a plugin cannot
+		// race its retry or patch the game twice. The magic is not a success flag.
 		constexpr size_t status_rva = 0x1A828D00;
 		constexpr uint32_t status_magic = 0xB03C0FFE;
 		const auto* status = reinterpret_cast<const uint32_t*>(base + status_rva);

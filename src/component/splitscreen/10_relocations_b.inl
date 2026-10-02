@@ -316,38 +316,57 @@
 				}
 			}
 
-			size_t done_disps = 0;
-			size_t done_bounds = 0;
-			const auto rollback = [&]
+			// Acquire every write permission before changing any operand. Rolling
+			// back with write_bytes could itself fail and leave normal clients using
+			// a mix of old/new fields or an allocation too small for the new fields.
+			std::array<DWORD, std::size(umbra_disps)> old_disps{};
+			std::array<DWORD, std::size(umbra_bounds)> old_bounds{};
+			size_t protected_disps = 0;
+			size_t protected_bounds = 0;
+			const auto restore = utils::finally([&]
 			{
-				for (size_t i = 0; i < done_disps; ++i)
+				// Several operands share a page; unwind in reverse acquisition order.
+				DWORD tmp{};
+				while (protected_bounds)
 				{
-					write_bytes(reinterpret_cast<void*>(b + umbra_disps[i].rva + umbra_disps[i].off),
-					            &umbra_disps[i].old_value, sizeof(uint32_t));
+					const auto i = --protected_bounds;
+					VirtualProtect(reinterpret_cast<void*>(b + umbra_bounds[i].rva + 3),
+					               1, old_bounds[i], &tmp);
 				}
-				for (size_t i = 0; i < done_bounds; ++i)
+				while (protected_disps)
 				{
-					write_bytes(reinterpret_cast<void*>(b + umbra_bounds[i].rva + 3),
-					            &umbra_bounds[i].old_value, 1);
+					const auto i = --protected_disps;
+					VirtualProtect(reinterpret_cast<void*>(b + umbra_disps[i].rva + umbra_disps[i].off),
+					               sizeof(uint32_t), old_disps[i], &tmp);
 				}
-			};
+			});
 			for (const auto& s : umbra_disps)
 			{
-				if (!write_bytes(reinterpret_cast<void*>(b + s.rva + s.off), &s.new_value, sizeof(uint32_t)))
+				if (!VirtualProtect(reinterpret_cast<void*>(b + s.rva + s.off),
+				                    sizeof(uint32_t), PAGE_EXECUTE_READWRITE, &old_disps[protected_disps]))
 				{
-					rollback();
+					note("[splitscreen] umbra: write permission at 0x%08X failed - nothing written\n", s.rva);
 					return false;
 				}
-				++done_disps;
+				++protected_disps;
 			}
 			for (const auto& u : umbra_bounds)
 			{
-				if (!write_bytes(reinterpret_cast<void*>(b + u.rva + 3), &u.new_value, 1))
+				if (!VirtualProtect(reinterpret_cast<void*>(b + u.rva + 3),
+				                    1, PAGE_EXECUTE_READWRITE, &old_bounds[protected_bounds]))
 				{
-					rollback();
+					note("[splitscreen] umbra: write permission at 0x%08X failed - nothing written\n", u.rva);
 					return false;
 				}
-				++done_bounds;
+				++protected_bounds;
+			}
+			for (const auto& s : umbra_disps)
+			{
+				std::memcpy(reinterpret_cast<void*>(b + s.rva + s.off), &s.new_value, sizeof(uint32_t));
+			}
+			for (const auto& u : umbra_bounds)
+			{
+				std::memcpy(reinterpret_cast<void*>(b + u.rva + 3), &u.new_value, 1);
 			}
 			umbra_grown = true;
 			return true;
