@@ -828,7 +828,7 @@
 		// The injected local client has no message channel, so the launch stalls
 		// on the lobby state message. Hold its gate fields and ack equal to a real
 		// local guest (slot 1) for the whole launch; this copies true state.
-		void hold_injected_clients()
+		void update_injected_launch_state()
 		{
 			const auto session = base() + lobby_pool_rva + game_lobby_index * lobby_pool_stride;
 			const auto sequence = *reinterpret_cast<uint32_t*>(base() + launch_sequence_rva);
@@ -876,6 +876,15 @@
 					*ack = target_ack;
 				}
 			}
+		}
+
+		void hold_injected_clients()
+		{
+			// Acquiring before the reads prevents an older plugin callback from
+			// overwriting a newer callback's ack/gates with its stale snapshot.
+			// This does not synchronize with the game's own lobby updates.
+			static constinit guest_launch_coordinator coordinator;
+			coordinator.try_run(update_injected_launch_state);
 		}
 
 		// Status block for external readers (there is no console) at status_rva, in the

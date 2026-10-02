@@ -11,6 +11,7 @@
 #include "scheduler.hpp"
 #include "splitscreen_addresses.hpp"
 #include "splitscreen_midhook.hpp"
+#include "splitscreen_guest_launch.hpp"
 
 #include <utils/hook.hpp>
 #include <utils/finally.hpp>
@@ -342,9 +343,9 @@ namespace splitscreen
 			widen_gamepad_button_models();
 			widen_lobby_max_local_players();
 
-			// Hold the injected clients on both pipelines: async stops during a
-			// launch, and a hold registered only there hung the load. The hold only
-			// moves values forward, so running it twice is idempotent.
+			// Keep both launch-hold drivers: the renderer is the loading fallback
+			// when async cannot make progress. The callback skips overlapping holds
+			// before reading lobby state; neither pipeline waits for the other.
 			scheduler::loop(hold_injected_clients, scheduler::pipeline::async, 5ms);
 			scheduler::loop(hold_injected_clients, scheduler::pipeline::renderer, 5ms);
 
